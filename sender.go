@@ -16,14 +16,6 @@ import (
 	"strings"
 )
 
-var (
-	frame_email = os.Getenv("AURA_FRAME_EMAIL")
-	host        = os.Getenv("EMAIL_HOST")
-	username    = os.Getenv("EMAIL_USERNAME")
-	password    = os.Getenv("EMAIL_PASSWORD")
-	portNumber  = os.Getenv("EMAIL_PORT")
-)
-
 type Sender struct {
 	auth smtp.Auth
 }
@@ -38,12 +30,12 @@ type Message struct {
 }
 
 func New() *Sender {
-	auth := smtp.PlainAuth("", username, password, host)
+	auth := smtp.PlainAuth("", os.Getenv("EMAIL_USERNAME"), os.Getenv("EMAIL_PASSWORD"), os.Getenv("EMAIL_HOST"))
 	return &Sender{auth}
 }
 
 func (s *Sender) Send(m *Message) error {
-	return smtp.SendMail(fmt.Sprintf("%s:%s", host, portNumber), s.auth, username, m.To, m.ToBytes())
+	return smtp.SendMail(fmt.Sprintf("%s:%s", os.Getenv("EMAIL_HOST"), os.Getenv("EMAIL_PORT")), s.auth, os.Getenv("EMAIL_USERNAME"), m.To, m.ToBytes())
 }
 
 func NewMessage(s, b string) *Message {
@@ -135,7 +127,7 @@ func SendAuraEmail(image string) {
 	sender := New()
 	rando := fmt.Sprintf("Image Upload: %s", RandStringBytes(8))
 	m := NewMessage(rando, "image uplodad")
-	m.To = []string{frame_email}
+	m.To = []string{os.Getenv("AURA_FRAME_EMAIL")}
 	m.AttachUrlImage(image)
 	fmt.Println(sender.Send(m))
 }
