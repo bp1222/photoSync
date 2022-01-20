@@ -132,6 +132,7 @@ func (m *Message) ToBytes() []byte {
 }
 
 func SendAuraEmail(image string) {
+	fmt.Fprintf(os.Stdout, "Pushing image to frame: %s\n", image)
 	sender := New()
 	rando := fmt.Sprintf("Image Upload: %s", RandStringBytes(8))
 	m := NewMessage(rando, "image uplodad")

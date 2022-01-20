@@ -54,12 +54,12 @@ func main() {
 			if entry.Emotions != nil {
 				for _, emotion := range *entry.Emotions {
 					if emotion.GetUserId() == TINYBEANS_DAVE_ID {
-						if !firstRun && !tiny.IsLikedBy(entry.GetId(), TINYBEANS_DAVE_ID) {
+						if !firstRun && !tiny.IsLikedBy(entry.GetUserId(), TINYBEANS_DAVE_ID) {
 							SendAuraEmail(*entry.Blobs.O)
 						}
 						db.Save(Like{
 							EntryId:   entry.GetId(),
-							UserId:    emotion.GetId(),
+							UserId:    emotion.GetUserId(),
 							Timestamp: emotion.GetLastUpdatedTimestamp(),
 						})
 					}
