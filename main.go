@@ -54,7 +54,9 @@ func main() {
 			if entry.Emotions != nil {
 				for _, emotion := range *entry.Emotions {
 					if emotion.GetUserId() == TINYBEANS_DAVE_ID {
+						fmt.Fprintf(os.Stdout, "Dave Liked an image\n")
 						if !firstRun && !tiny.IsLikedBy(entry.GetUserId(), TINYBEANS_DAVE_ID) {
+							fmt.Fprintf(os.Stdout, "Image being sent to Aura Frame: %s\n", *entry.Blobs.O)
 							SendAuraEmail(*entry.Blobs.O)
 						}
 						db.Save(Like{
