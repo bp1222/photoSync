@@ -19,7 +19,7 @@ import (
 var (
 	frame_email = os.Getenv("AURA_FRAME_EMAIL")
 	host        = os.Getenv("EMAIL_HOST")
-	username    = os.Getenv("EMAiL_USERNAME")
+	username    = os.Getenv("EMAIL_USERNAME")
 	password    = os.Getenv("EMAIL_PASSWORD")
 	portNumber  = os.Getenv("EMAIL_PORT")
 )

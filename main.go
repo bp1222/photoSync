@@ -46,16 +46,11 @@ func main() {
 		for _, entry := range *entries.Entries {
 			fmt.Fprintf(os.Stdout, "Entry %d, %s, %d\n", entry.GetId(), entry.GetClientRef(), entry.GetLastUpdatedTimestamp())
 
-			db.Save(&Entry{
-				EntryId:   entry.GetId(),
-				Timestamp: entry.GetLastUpdatedTimestamp(),
-			})
-
 			if entry.Emotions != nil {
 				for _, emotion := range *entry.Emotions {
 					if emotion.GetUserId() == TINYBEANS_DAVE_ID {
 						fmt.Fprintf(os.Stdout, "Dave Liked an image\n")
-						if !firstRun && !tiny.IsLikedBy(entry.GetUserId(), TINYBEANS_DAVE_ID) {
+						if !firstRun && !tiny.IsLikedBy(entry.GetId(), TINYBEANS_DAVE_ID) {
 							fmt.Fprintf(os.Stdout, "Image being sent to Aura Frame: %s\n", *entry.Blobs.O)
 							SendAuraEmail(*entry.Blobs.O)
 						}
@@ -67,6 +62,12 @@ func main() {
 					}
 				}
 			}
+
+			db.Save(&Entry{
+				EntryId:   entry.GetId(),
+				Timestamp: entry.GetLastUpdatedTimestamp(),
+			})
+
 			since = entry.GetLastUpdatedTimestamp()
 		}
 
