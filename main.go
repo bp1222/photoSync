@@ -1,18 +1,23 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"time"
 
+	"github.com/bp1222/photoSync/mail"
+	tbApi "github.com/bp1222/tinybeans-api/go-client"
 	"github.com/joho/godotenv"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/bp1222/photoSync/database"
+	"github.com/bp1222/photoSync/tinybeans"
 )
 
-const (
-	TINYBEANS_JOURNAL = int64(1328947)
-	TINYBEANS_DAVE_ID = int64(3248901)
+var (
+	config    = Config{}
+	Tinybeans tinybeans.Tinybeans
+	Database  database.Database
 )
 
 func main() {
@@ -22,59 +27,90 @@ func main() {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	db, err := GetDatabase()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	loadConfig()
+
+	Database = database.InitDatabase()
+	Tinybeans = tinybeans.InitTinybeans(Database)
+
+	for _, journal := range config.Journals {
+		log.Infof("Iterating journal (%d)", journal.Id)
+		doProcessTinybeansJournal(journal)
 	}
+}
 
-	tiny := InitTinybeans(db)
-
-	if err := tiny.Authenticate(); err != nil {
-		log.Fatal("unable to authenticate to tinybeans")
-	}
-
-	since := tiny.GetMostRecentEntry(TINYBEANS_JOURNAL)
-	firstRun := since == 0
+func doProcessTinybeansJournal(journal Journal) {
+	since := Database.GetMostRecentEntry(journal.Id)
+	log.Infof("Most recent entry for journal (%d) on (%d)", journal.Id, since)
 
 	for {
-		entries, _ := tiny.GetJournalEntriesSince(TINYBEANS_JOURNAL, 200, since)
+		entries, _ := Tinybeans.GetJournalEntriesSince(journal.Id, 200, since)
+		log.Infof("Found %d new entries", len(entries.GetEntries()))
 
 		if entries.Entries == nil {
 			break
 		}
-		for _, entry := range *entries.Entries {
-			fmt.Fprintf(os.Stdout, "Entry %d, %s, %d\n", entry.GetId(), entry.GetClientRef(), entry.GetLastUpdatedTimestamp())
 
-			if entry.Emotions != nil {
-				for _, emotion := range *entry.Emotions {
-					if emotion.GetUserId() == TINYBEANS_DAVE_ID {
-						fmt.Fprintf(os.Stdout, "Dave Liked an image\n")
-						if !firstRun && !tiny.IsLikedBy(entry.GetId(), TINYBEANS_DAVE_ID) {
-							fmt.Fprintf(os.Stdout, "Image being sent to Aura Frame: %s\n", *entry.Blobs.O)
-							SendAuraEmail(*entry.Blobs.O)
-						}
-						db.Save(Like{
-							EntryId:   entry.GetId(),
-							UserId:    emotion.GetUserId(),
-							Timestamp: emotion.GetLastUpdatedTimestamp(),
-						})
-					}
-				}
-			}
-
-			db.Save(&Entry{
-				EntryId:   entry.GetId(),
-				Timestamp: entry.GetLastUpdatedTimestamp(),
-			})
-
+		for _, entry := range entries.Entries {
+			log.Infof("Processing journal (%d) entry (%d)", journal.Id, entry.GetId())
+			doProcessTinybeansEntry(journal.Id, entry)
 			since = entry.GetLastUpdatedTimestamp()
 		}
 
 		if entries.GetNumEntriesRemaining() == 0 {
 			break
 		}
+
+		// Be Nice
 		time.Sleep(time.Second * 2)
 	}
-	fmt.Println("Done with Loading Previous Images")
+}
+
+func doProcessTinybeansEntry(journalId int64, entry tbApi.Entry) {
+	if entry.Emotions != nil {
+		for _, emotion := range entry.Emotions {
+			doProcessTinybeansEntryEmotion(journalId, entry, emotion)
+		}
+	}
+
+	Database.SaveEntry(entry.GetId(), journalId, entry.GetLastUpdatedTimestamp())
+}
+
+func isUserTrackedForJournal(userId, journalId int64) *User {
+	var trackedUsers []User
+
+	for _, j := range config.Journals {
+		if journalId == j.Id {
+			trackedUsers = j.Users
+			break
+		}
+	}
+
+	if trackedUsers == nil {
+		return nil
+	}
+
+	for _, user := range trackedUsers {
+		if user.Id == userId {
+			return &user
+		}
+	}
+
+	return nil
+}
+
+func doProcessTinybeansEntryEmotion(journalId int64, entry tbApi.Entry, emotion tbApi.Emotion) {
+	if user := isUserTrackedForJournal(emotion.GetUserId(), journalId); user != nil {
+		log.Infof("Found emotion on journal (%d), on entry (%d) for user (%d)", journalId, entry.GetId(), user.Id)
+		for _, frameId := range user.FrameIds {
+			if !Database.IsLiked(entry.GetId(), user.Id, frameId) {
+				if doMail, found := os.LookupEnv("LIVE_SEND_MAIL"); found && doMail == "true" {
+					log.Infof("Image being sent to Aura Frame: %s", *entry.Blobs.O)
+					mail.SendAuraEmail(*entry.Blobs.O)
+				} else {
+					log.Infof("TEST: Image would be sent to Aura Frame: %s", *entry.Blobs.O)
+				}
+			}
+			Database.SaveLike(entry.GetId(), user.Id, frameId, emotion.GetLastUpdatedTimestamp())
+		}
+	}
 }

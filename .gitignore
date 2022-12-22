@@ -1,3 +1,9 @@
+.idea/
+.vscode/
+vendor/
+
+.env
+userFrameConfig.yaml
+
 tinybeans_photos.db
 tinybeans.key
-.env
