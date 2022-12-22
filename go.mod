@@ -3,15 +3,13 @@ module github.com/bp1222/photoSync
 go 1.18
 
 require (
-	github.com/bp1222/tinybeans-api/go-client v0.1.1
+	github.com/bp1222/tinybeans-api/go-client v0.0.0-20221222011038-187cb6d06b49
 	github.com/joho/godotenv v1.4.0
 	github.com/sirupsen/logrus v1.9.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.2.6
 	gorm.io/gorm v1.22.5
 )
-
-replace github.com/bp1222/tinybeans-api/go-client => ../tinybeans-api/go-client
 
 require (
 	github.com/golang/protobuf v1.5.2 // indirect
