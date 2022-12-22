@@ -104,8 +104,8 @@ func doProcessTinybeansEntryEmotion(journalId int64, entry tbApi.Entry, emotion 
 		for _, frameId := range user.FrameIds {
 			if !Database.IsLiked(entry.GetId(), user.Id, frameId) {
 				if doMail, found := os.LookupEnv("LIVE_SEND_MAIL"); found && doMail == "true" {
-					log.Infof("Image being sent to Aura Frame: %s", *entry.Blobs.O)
-					mail.SendAuraEmail(*entry.Blobs.O)
+					log.Infof("Image being sent to Aura Frame (%s): %s", frameId, *entry.Blobs.O)
+					mail.SendAuraEmail(frameId, *entry.Blobs.O)
 				} else {
 					log.Infof("TEST: Image would be sent to Aura Frame: %s", *entry.Blobs.O)
 				}

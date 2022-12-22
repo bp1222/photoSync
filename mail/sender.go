@@ -123,11 +123,12 @@ func (m *Message) ToBytes() []byte {
 	return buf.Bytes()
 }
 
-func SendAuraEmail(image string) {
+func SendAuraEmail(frameId, image string) {
 	sender := New()
 	rando := fmt.Sprintf("Image Upload: %s", RandStringBytes(8))
 	m := NewMessage(rando, "image uplodad")
-	m.To = []string{os.Getenv("AURA_FRAME_EMAIL")}
+	email := fmt.Sprintf("%s@send.auraframes.com", frameId)
+	m.To = []string{email}
 	m.AttachUrlImage(image)
 	fmt.Println(sender.Send(m))
 }
