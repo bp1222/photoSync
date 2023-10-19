@@ -5,19 +5,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/bp1222/photoSync/database"
 	"github.com/bp1222/photoSync/mail"
+	"github.com/bp1222/photoSync/tinybeans"
 	tbApi "github.com/bp1222/tinybeans-api/go-client"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/bp1222/photoSync/database"
-	"github.com/bp1222/photoSync/tinybeans"
 )
 
 var (
-	config    = Config{}
-	Tinybeans tinybeans.Tinybeans
-	Database  database.Database
+	config = Config{}
+	tb     tinybeans.Tinybeans
+	db     database.Database
 )
 
 func main() {
@@ -29,8 +28,8 @@ func main() {
 
 	loadConfig()
 
-	Database = database.InitDatabase()
-	Tinybeans = tinybeans.InitTinybeans(Database)
+	db = database.InitDatabase()
+	tb = tinybeans.InitTinybeans(db)
 
 	for _, journal := range config.Journals {
 		log.Infof("Iterating journal (%d)", journal.Id)
@@ -39,11 +38,11 @@ func main() {
 }
 
 func doProcessTinybeansJournal(journal Journal) {
-	since := Database.GetMostRecentEntry(journal.Id)
+	since := db.GetMostRecentEntry(journal.Id)
 	log.Infof("Most recent entry for journal (%d) on (%d)", journal.Id, since)
 
 	for {
-		entries, _ := Tinybeans.GetJournalEntriesSince(journal.Id, 200, since)
+		entries, _ := tb.GetJournalEntriesSince(journal.Id, 200, since)
 		log.Infof("Found %d new entries", len(entries.GetEntries()))
 
 		if entries.Entries == nil {
@@ -72,7 +71,7 @@ func doProcessTinybeansEntry(journalId int64, entry tbApi.Entry) {
 		}
 	}
 
-	Database.SaveEntry(entry.GetId(), journalId, entry.GetLastUpdatedTimestamp())
+	db.SaveEntry(entry.GetId(), journalId, entry.GetLastUpdatedTimestamp())
 }
 
 func isUserTrackedForJournal(userId, journalId int64) *User {
@@ -102,15 +101,17 @@ func doProcessTinybeansEntryEmotion(journalId int64, entry tbApi.Entry, emotion 
 	if user := isUserTrackedForJournal(emotion.GetUserId(), journalId); user != nil {
 		log.Infof("Found emotion on journal (%d), on entry (%d) for user (%d)", journalId, entry.GetId(), user.Id)
 		for _, frameId := range user.FrameIds {
-			if !Database.IsLiked(entry.GetId(), user.Id, frameId) {
-				if doMail, found := os.LookupEnv("LIVE_SEND_MAIL"); found && doMail == "true" {
+			if !db.IsLiked(entry.GetId(), user.Id, frameId) {
+				if doMail, ok := os.LookupEnv("LIVE_SEND_MAIL"); ok && doMail == "true" {
 					log.Infof("Image being sent to Aura Frame (%s): %s", frameId, *entry.Blobs.O)
-					mail.SendAuraEmail(frameId, *entry.Blobs.O)
+					if err := mail.SendAuraEmail(frameId, *entry.Blobs.O); err != nil {
+						log.Fatal("Email failed to send", err)
+					}
 				} else {
 					log.Infof("TEST: Image would be sent to Aura Frame: %s", *entry.Blobs.O)
 				}
 			}
-			Database.SaveLike(entry.GetId(), user.Id, frameId, emotion.GetLastUpdatedTimestamp())
+			db.SaveLike(entry.GetId(), user.Id, frameId, emotion.GetLastUpdatedTimestamp())
 		}
 	}
 }

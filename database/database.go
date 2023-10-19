@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DB_FILE = "./tinybeans_photos.db"
+	dbFile = "./tinybeans_photos.db"
 )
 
 type Database interface {
@@ -24,15 +24,15 @@ type database struct {
 }
 
 func InitDatabase() Database {
-	db, err := gorm.Open(sqlite.Open(DB_FILE), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(dbFile), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
 		log.Fatal("unable to open database")
 	}
 
-	db.AutoMigrate(&Entry{})
-	db.AutoMigrate(&Like{})
+	_ = db.AutoMigrate(&Entry{})
+	_ = db.AutoMigrate(&Like{})
 
 	return &database{
 		db,

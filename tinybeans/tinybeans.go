@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	KEY_FILE = "./tinybeans.key"
+	keyFile = "./tinybeans.key"
 )
 
 type Tinybeans interface {
@@ -31,10 +31,12 @@ type tinybeans struct {
 func InitTinybeans(db database.Database) Tinybeans {
 	configuration := tb.NewConfiguration()
 
-	if os.Getenv("DEBUG") == "true" {
-		proxyUrl, _ := url.Parse("http://localhost:8080")
+	if proxy, ok := os.LookupEnv("DEBUG_MITM_PROXY"); ok {
+		proxyUrl, _ := url.Parse(proxy)
 		configuration.HTTPClient = &http.Client{
-			Transport: &http.Transport{Proxy: http.ProxyURL(proxyUrl)},
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(proxyUrl),
+			},
 		}
 	}
 
@@ -52,14 +54,14 @@ func InitTinybeans(db database.Database) Tinybeans {
 }
 
 func saveStoredKey(key string) error {
-	if err := os.WriteFile(KEY_FILE, []byte(key), fs.FileMode(0700)); err != nil {
+	if err := os.WriteFile(keyFile, []byte(key), fs.FileMode(0700)); err != nil {
 		return err
 	}
 	return nil
 }
 
 func readStoredKey() string {
-	data, err := os.ReadFile(KEY_FILE)
+	data, err := os.ReadFile(keyFile)
 	if err != nil {
 		return ""
 	}
