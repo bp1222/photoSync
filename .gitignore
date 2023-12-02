@@ -1,9 +1,12 @@
 .idea/
 .vscode/
+*.iml
 vendor/
 
-.env
+
+config.yaml
+credentials.json
+
 photoSync
-userFrameConfig.yaml
 tinybeans_photos.db
 tinybeans.key

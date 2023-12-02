@@ -4,11 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"net/http"
-	"net/url"
 	"os"
 
-	"github.com/bp1222/photoSync/database"
 	tb "github.com/bp1222/tinybeans-api/go-client"
 	log "github.com/sirupsen/logrus"
 )
@@ -24,25 +21,24 @@ type Tinybeans interface {
 
 type tinybeans struct {
 	api       *tb.APIClient
-	db        database.Database
+	config    Config
 	authtoken string
 }
 
-func InitTinybeans(db database.Database) Tinybeans {
-	configuration := tb.NewConfiguration()
+func InitTinybeans(config Config, opts ...OptionFunc) Tinybeans {
+	apiConfig := tb.NewConfiguration()
 
-	if proxy, ok := os.LookupEnv("DEBUG_MITM_PROXY"); ok {
-		proxyUrl, _ := url.Parse(proxy)
-		configuration.HTTPClient = &http.Client{
-			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyUrl),
-			},
-		}
+	for _, o := range opts {
+		o(&config)
+	}
+
+	if config.client != nil {
+		apiConfig.HTTPClient = config.client
 	}
 
 	t := tinybeans{
-		db:        db,
-		api:       tb.NewAPIClient(configuration),
+		api:       tb.NewAPIClient(apiConfig),
+		config:    config,
 		authtoken: readStoredKey(),
 	}
 
@@ -110,8 +106,8 @@ func (t *tinybeans) authenticate() error {
 	authenticateRequest := tb.AuthenticateRequst{}
 
 	authenticateRequest.SetClientId("d324d503-0127-4a85-a547-d9f2439ffeae") // Web UI id, sorry analytics.
-	authenticateRequest.SetUsername(os.Getenv("TINYBEANS_USERNAME"))
-	authenticateRequest.SetPassword(os.Getenv("TINYBEANS_PASSWORD"))
+	authenticateRequest.SetUsername(t.config.Username)
+	authenticateRequest.SetPassword(t.config.Password)
 
 	resp, _, err := t.api.AuthApi.Login(context.Background()).AuthenticateRequst(authenticateRequest).Execute()
 	if err != nil {

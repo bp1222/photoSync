@@ -1,15 +1,15 @@
 package main
 
 import (
-	"math/rand"
-	"os"
+	"fmt"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/bp1222/photoSync/database"
 	"github.com/bp1222/photoSync/mail"
 	"github.com/bp1222/photoSync/tinybeans"
 	tbApi "github.com/bp1222/tinybeans-api/go-client"
-	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,27 +17,58 @@ var (
 	config = Config{}
 	tb     tinybeans.Tinybeans
 	db     database.Database
+	sender mail.Sender
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("unable to load environment")
-	}
-
-	rand.Seed(time.Now().UTC().UnixNano())
-
 	loadConfig()
+	setupDatabase()
+	setupTinybeans()
+	setupSender()
 
-	db = database.InitDatabase()
-	tb = tinybeans.InitTinybeans(db)
-
-	for _, journal := range config.Journals {
+	for _, journal := range config.Tinybeans.Journals {
 		log.Infof("Iterating journal (%d)", journal.Id)
 		doProcessTinybeansJournal(journal)
 	}
 }
 
-func doProcessTinybeansJournal(journal Journal) {
+func setupDatabase() {
+	db = database.InitDatabase()
+}
+
+func setupTinybeans() {
+	tinybeansOpts := []tinybeans.OptionFunc{
+		tinybeans.WithDatabase(db),
+	}
+
+	if config.Mitm != nil {
+		proxyUrl, _ := url.Parse(fmt.Sprintf("%s:%d", config.Mitm.Host, config.Mitm.Port))
+		tinybeansOpts = append(tinybeansOpts, tinybeans.WithClient(&http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(proxyUrl),
+			},
+		}))
+	}
+
+	tb = tinybeans.InitTinybeans(config.Tinybeans, tinybeansOpts...)
+}
+
+func setupSender() {
+	if (config.Sender.Smtp == nil && config.Sender.Gmail == nil) ||
+		(config.Sender.Smtp != nil && config.Sender.Gmail != nil) {
+		log.Fatal("Must have one, and only one sender config")
+	}
+
+	if config.Sender.Smtp != nil {
+		sender = mail.SMTPEmail{}
+	}
+
+	if config.Sender.Gmail != nil {
+		sender = mail.GmailEmail{}
+	}
+}
+
+func doProcessTinybeansJournal(journal tinybeans.Journal) {
 	since := db.GetMostRecentEntry(journal.Id)
 	log.Infof("Most recent entry for journal (%d) on (%d)", journal.Id, since)
 
@@ -74,10 +105,29 @@ func doProcessTinybeansEntry(journalId int64, entry tbApi.Entry) {
 	db.SaveEntry(entry.GetId(), journalId, entry.GetLastUpdatedTimestamp())
 }
 
-func isUserTrackedForJournal(userId, journalId int64) *User {
-	var trackedUsers []User
+func doProcessTinybeansEntryEmotion(journalId int64, entry tbApi.Entry, emotion tbApi.Emotion) {
+	if user := isUserTrackedForJournal(emotion.GetUserId(), journalId); user != nil {
+		log.Infof("Found emotion on journal (%d), on entry (%d) for user (%d)", journalId, entry.GetId(), user.Id)
+		for _, frameId := range user.FrameIds {
+			if !db.IsLiked(entry.GetId(), user.Id, frameId) {
+				if config.Live {
+					log.Infof("Image being sent to Aura Frame (%s): %s", frameId, *entry.Blobs.O)
+					if err := sender.Send(config.Sender.From, frameId, *entry.Blobs.O); err != nil {
+						log.Fatal("Email failed to send", err)
+					}
+				} else {
+					log.Infof("TEST: Image would be sent to Aura Frame: %s", frameId)
+				}
+			}
+			db.SaveLike(entry.GetId(), user.Id, frameId, emotion.GetLastUpdatedTimestamp())
+		}
+	}
+}
 
-	for _, j := range config.Journals {
+func isUserTrackedForJournal(userId, journalId int64) *tinybeans.User {
+	var trackedUsers []tinybeans.User
+
+	for _, j := range config.Tinybeans.Journals {
 		if journalId == j.Id {
 			trackedUsers = j.Users
 			break
@@ -95,23 +145,4 @@ func isUserTrackedForJournal(userId, journalId int64) *User {
 	}
 
 	return nil
-}
-
-func doProcessTinybeansEntryEmotion(journalId int64, entry tbApi.Entry, emotion tbApi.Emotion) {
-	if user := isUserTrackedForJournal(emotion.GetUserId(), journalId); user != nil {
-		log.Infof("Found emotion on journal (%d), on entry (%d) for user (%d)", journalId, entry.GetId(), user.Id)
-		for _, frameId := range user.FrameIds {
-			if !db.IsLiked(entry.GetId(), user.Id, frameId) {
-				if doMail, ok := os.LookupEnv("LIVE_SEND_MAIL"); ok && doMail == "true" {
-					log.Infof("Image being sent to Aura Frame (%s): %s", frameId, *entry.Blobs.O)
-					if err := mail.SendAuraEmail(frameId, *entry.Blobs.O); err != nil {
-						log.Fatal("Email failed to send", err)
-					}
-				} else {
-					log.Infof("TEST: Image would be sent to Aura Frame: %s", *entry.Blobs.O)
-				}
-			}
-			db.SaveLike(entry.GetId(), user.Id, frameId, emotion.GetLastUpdatedTimestamp())
-		}
-	}
 }
